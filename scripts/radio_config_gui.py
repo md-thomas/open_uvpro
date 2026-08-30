@@ -265,10 +265,15 @@ class RadioConfigGUI(ctk.CTk):
             try:
                 result = f.result()
             except Exception as e:
+                # `e` is unbound again the moment this except block exits
+                # (Python implicitly deletes it) -- rebind to a plain local
+                # so the lambda below, which only runs on the next mainloop
+                # tick via self.after(), has something to close over.
+                err = e
                 if on_error:
-                    self.after(0, lambda: on_error(e))
+                    self.after(0, lambda: on_error(err))
                 else:
-                    self.after(0, lambda: self._log(f"Error: {e}\n"))
+                    self.after(0, lambda: self._log(f"Error: {err}\n"))
                 return
             if on_success:
                 self.after(0, lambda: on_success(result))
