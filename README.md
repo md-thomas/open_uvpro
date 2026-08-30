@@ -30,19 +30,22 @@ python scripts/channel_control.py list # list channel memories
 python scripts/radio_info.py           # battery/signal/current channel/dual-watch/GPS snapshot (JSON)
 ```
 
-### GUI
+### KISS bridge control GUI
 
-A CustomTkinter desktop app wraps the above: scan for and remember the
-radio's Bluetooth device, connect/disconnect, start/stop the packet
-bridge and Pat, and view live radio info -- all from one window.
+A CustomTkinter desktop app for the Linux-side connection lifecycle:
+scan for and remember the radio's Bluetooth device, connect/disconnect,
+start/stop the packet bridge and Pat, and view live radio info -- all
+from one window. This is *not* general UV-Pro control (channel editing
+etc.) -- that's `channel_control.py` above.
 
 ```bash
-.venv/bin/python scripts/gui.py
+scripts/start_kiss_gui.sh
 ```
 
-Always launch it through the venv, not a bare `python3` -- it shells out
-to other scripts (e.g. the scan) using `sys.executable`, so a system
-Python without `bleak`/`benlink` installed will fail those actions.
+That script always launches through the venv rather than a bare
+`python3` -- `kiss_gui.py` shells out to other scripts (e.g. the scan)
+using `sys.executable`, so a system Python without `bleak`/`benlink`
+installed would fail those actions.
 
 ### Packet radio / Winlink (Pat) over Bluetooth
 

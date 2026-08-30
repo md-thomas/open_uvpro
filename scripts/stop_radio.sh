@@ -6,7 +6,7 @@
 #   scripts/stop_radio.sh
 #
 # If the SUDO_PASS env var is set, it's piped to `sudo -S` instead of
-# prompting on the terminal -- used by gui.py. Not persisted anywhere;
+# prompting on the terminal -- used by kiss_gui.py. Not persisted anywhere;
 # leave it unset for normal interactive use.
 
 set -uo pipefail

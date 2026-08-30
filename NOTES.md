@@ -72,9 +72,10 @@ find (most are also commented inline where relevant):
   multi-terminal juggling); see below.
 - `install_sudo_rules.sh` — one-time setup for passwordless `kissattach`
   attach/detach; see "Passwordless sudo" below.
-- `gui.py` — CustomTkinter desktop app wrapping all of the above (device
-  scan/remember/connect, bridge/Pat start-stop, live radio info); see
-  "GUI" below.
+- `kiss_gui.py` (launch via `start_kiss_gui.sh`) — CustomTkinter desktop
+  app for the connection lifecycle (device scan/remember/connect,
+  bridge/Pat start-stop, live radio info) -- not general UV-Pro control
+  (that's `channel_control.py` above); see "GUI" below.
 
 Note: the radio's actively-displayed channel is hardware-dial-controlled
 and not remotely settable in this protocol.
@@ -104,7 +105,7 @@ echo "wl2k    K0MDT-1 1200    255     2       UV-Pro Bluetooth TNC" | sudo tee -
 (`kissattach`, `ax25d` present in `/usr/sbin`), `axports` has the `wl2k`
 entry above.)
 
-Per session (or just use `gui.py` -- see "GUI" below):
+Per session (or just use `kiss_gui.py` -- see "GUI" below):
 
 ```
 scripts/start_radio.sh                # backgrounds kiss_bridge.py, then
@@ -282,14 +283,15 @@ The GUI's sudo password field (and `SUDO_PASS` for the CLI scripts)
 still works regardless of whether this is installed -- it's a
 convenience, not a requirement.
 
-## GUI (gui.py)
+## GUI (kiss_gui.py)
 
-CustomTkinter desktop wrapper around the scripts above: scan for and
-remember the radio's Bluetooth device (persisted to
-`~/.cache/uvpro-gui-device.json`), connect/disconnect, start/stop the
-bridge and Pat, and view live radio info. Run with
-`.venv/bin/python scripts/gui.py` -- **not** a bare `python3`, since it
-launches other scripts (e.g. the scan) via `sys.executable`, and a
+CustomTkinter desktop wrapper around the scripts above -- connection
+lifecycle only (device scan/remember/connect, bridge/Pat start-stop,
+live radio info), not general UV-Pro control -- named `kiss_gui.py`
+(not just `gui.py`) for that reason. Persists the remembered device to
+`~/.cache/uvpro-gui-device.json`. Launch via `scripts/start_kiss_gui.sh`,
+which always goes through the venv rather than a bare `python3` -- the
+app launches other scripts (e.g. the scan) via `sys.executable`, and a
 system Python without this project's venv packages will fail those.
 
 Gotchas hit building it (2026-08-30), for if similar symptoms show up
@@ -323,7 +325,7 @@ again:
   manager reacting to the churn. Fix: `sticky="w"` (fixed width, doesn't
   stretch) on the affected widget, and skip `.configure()` entirely when
   the target text/color hasn't actually changed (see `_set_label` in
-  `gui.py`). Also keep any variable-length text (e.g. a raw exception
+  `kiss_gui.py`). Also keep any variable-length text (e.g. a raw exception
   message) short and/or `wraplength`-wrapped -- an unwrapped long line
   forces its column far wider than the window and was a second way to
   trigger the same underlying instability.

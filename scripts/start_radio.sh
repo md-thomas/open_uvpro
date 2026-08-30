@@ -21,7 +21,7 @@
 # kissattach`, or just run stop_radio.sh.
 #
 # If the SUDO_PASS env var is set, it's piped to `sudo -S` instead of
-# prompting on the terminal -- used by gui.py, which has no controlling
+# prompting on the terminal -- used by kiss_gui.py, which has no controlling
 # terminal to prompt on. Not persisted anywhere; leave it unset for
 # normal interactive use.
 

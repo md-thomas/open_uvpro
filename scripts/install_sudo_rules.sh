@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-time setup: let the UV-Pro radio scripts (start_radio.sh,
-# stop_radio.sh, gui.py) attach/detach the KISS TNC without a password
+# stop_radio.sh, kiss_gui.py) attach/detach the KISS TNC without a password
 # prompt every time, by installing a narrowly-scoped NOPASSWD sudoers
 # rule for exactly two commands:
 #
@@ -22,7 +22,7 @@
 # exactly what happened when this was tried by hand. A dedicated
 # sudoers.d file is guaranteed to be evaluated last and win.
 #
-# The password field in gui.py (and the SUDO_PASS env var in
+# The password field in kiss_gui.py (and the SUDO_PASS env var in
 # start_radio.sh/stop_radio.sh) still works either way -- this just makes
 # it optional instead of required.
 #

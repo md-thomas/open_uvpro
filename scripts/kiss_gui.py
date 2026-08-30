@@ -1,24 +1,26 @@
-"""Simple CustomTkinter GUI for the UV-Pro radio: scan for the Bluetooth
-device, and start/stop the KISS bridge (+ kissattach) and Pat's Winlink
-web UI.
+"""CustomTkinter GUI for the Linux-side KISS/AX.25 bridge to the UV-Pro:
+scan for the Bluetooth device, and start/stop the KISS bridge (+
+kissattach) and Pat's Winlink web UI.
 
-This is a thin wrapper around the existing scripts (scan_ble.py,
-start_radio.sh, stop_radio.sh, start_pat.sh, stop_pat.sh) rather than a
-reimplementation, so behavior stays in sync with the command-line tools,
-and process status is read live from the OS (pgrep) rather than tracked
-internally -- so it stays correct even if something was started/stopped
-outside the GUI.
+This is connection-lifecycle control, not general UV-Pro radio control
+(channel editing etc. -- see channel_control.py for that) -- it's a
+thin wrapper around the existing scripts (scan_ble.py, start_radio.sh,
+stop_radio.sh, start_pat.sh, stop_pat.sh) rather than a reimplementation,
+so behavior stays in sync with the command-line tools, and process
+status is read live from the OS (pgrep) rather than tracked internally
+-- so it stays correct even if something was started/stopped outside
+the GUI.
 
 kissattach needs sudo, and a GUI subprocess has no controlling terminal
 to prompt on. If you fill in the "sudo password" field, it's passed to
 start_radio.sh/stop_radio.sh via the SUDO_PASS environment variable for
 that one subprocess call only (never written to disk or logged); leave
 it blank to fall back to whatever terminal launched this GUI prompting
-you there instead (works if you started gui.py from an interactive
+you there instead (works if you started kiss_gui.py from an interactive
 shell).
 
 Usage:
-    python scripts/gui.py
+    python scripts/kiss_gui.py
 """
 
 import json
@@ -126,7 +128,7 @@ def _format_info(data: dict) -> str:
 class RadioGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("UV-Pro Radio Control")
+        self.title("UV-Pro KISS Bridge Control")
         self.geometry("640x780")
         self.minsize(560, 640)
 
