@@ -10,7 +10,10 @@ framing (FEND/FESC escaping) on it, and fragments/reassembles across the
 radio connection underneath.
 
 Usage:
-    python scripts/kiss_bridge.py XX:XX:XX:XX:XX:XX [pty_symlink_path]
+    python scripts/kiss_bridge.py [XX:XX:XX:XX:XX:XX] [pty_symlink_path]
+
+device address defaults to radio_config.DEFAULT_DEVICE_UUID (override via
+the UV_PRO_ADDR env var) if omitted.
 
 The pty symlink defaults to ~/.cache, not /tmp: kissattach runs as root
 via sudo, and the kernel's fs.protected_symlinks hardening (on by
@@ -44,6 +47,7 @@ import termios
 import patches  # noqa: F401 (applies protocol compatibility patches on import)
 from benlink.command import TncDataFragment, TncDataFragmentReceivedEvent
 from benlink.controller import RadioController
+from radio_config import DEFAULT_DEVICE_UUID
 from radio_connect import connect_rfcomm, log
 
 FEND = 0xC0
@@ -266,11 +270,7 @@ async def _run_one_connection(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        log(f"Usage: {sys.argv[0]} XX:XX:XX:XX:XX:XX [pty_symlink_path]")
-        sys.exit(1)
-
-    device_uuid = sys.argv[1]
+    device_uuid = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DEVICE_UUID
     symlink_path = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_PTY_PATH
 
     async def main() -> None:

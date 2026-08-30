@@ -18,6 +18,7 @@ import socket
 import patches  # noqa: F401 (applies protocol compatibility patches on import)
 from benlink import protocol as p
 from benlink.command import GetDeviceInfo, command_message_to_protocol
+from radio_config import DEFAULT_DEVICE_UUID
 
 CHANNEL_PROBE_RANGE = range(1, 9)
 PROBE_TIMEOUT = 3.0
@@ -66,4 +67,5 @@ def discover_command_channel(addr: str, keep_alive: bool = False) -> int:
 if __name__ == "__main__":
     import sys
 
-    print(discover_command_channel(sys.argv[1]))
+    addr = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DEVICE_UUID
+    print(discover_command_channel(addr))

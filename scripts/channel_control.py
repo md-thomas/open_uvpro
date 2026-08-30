@@ -9,10 +9,13 @@ points to; see status.double_channel for which slot (or neither) is
 currently active.
 
 Usage:
-    python scripts/channel_control.py XX:XX:XX:XX:XX:XX list
-    python scripts/channel_control.py XX:XX:XX:XX:XX:XX get <channel_id>
-    python scripts/channel_control.py XX:XX:XX:XX:XX:XX set-watch-channel A|B <channel_id>
-    python scripts/channel_control.py XX:XX:XX:XX:XX:XX edit <channel_id> key=value [key=value ...]
+    python scripts/channel_control.py [XX:XX:XX:XX:XX:XX] list
+    python scripts/channel_control.py [XX:XX:XX:XX:XX:XX] get <channel_id>
+    python scripts/channel_control.py [XX:XX:XX:XX:XX:XX] set-watch-channel A|B <channel_id>
+    python scripts/channel_control.py [XX:XX:XX:XX:XX:XX] edit <channel_id> key=value [key=value ...]
+
+device address defaults to radio_config.DEFAULT_DEVICE_UUID (override via
+the UV_PRO_ADDR env var) if omitted.
 
 Editable keys (edit): name, tx_freq, rx_freq, tx_mod (AM|FM|DMR),
 rx_mod (AM|FM|DMR), bandwidth (NARROW|WIDE), tx_sub_audio, rx_sub_audio
@@ -29,7 +32,10 @@ import sys
 
 import patches  # noqa: F401 (applies protocol compatibility patches on import)
 from benlink.controller import RadioController
+from radio_config import DEFAULT_DEVICE_UUID
 from radio_connect import connect_rfcomm, log
+
+COMMANDS = {"list", "get", "set-watch-channel", "edit"}
 
 BOOL_FIELDS = {
     "scan", "tx_at_max_power", "tx_at_med_power", "talk_around",
@@ -99,10 +105,15 @@ async def main(device_uuid: str, channel_arg: str, argv: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
+    if len(sys.argv) > 1 and sys.argv[1] in COMMANDS:
+        device_uuid = DEFAULT_DEVICE_UUID
+        command_argv = sys.argv[1:]
+    else:
+        device_uuid = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DEVICE_UUID
+        command_argv = sys.argv[2:]
+
+    if not command_argv:
         log(__doc__)
         sys.exit(1)
 
-    device_uuid = sys.argv[1]
-    command_argv = sys.argv[2:]
     asyncio.run(main(device_uuid, "auto", command_argv))

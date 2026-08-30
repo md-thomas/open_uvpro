@@ -9,6 +9,13 @@ The radio is paired via Bluetooth on `macbookair2` (Ubuntu). Radio MAC:
 `38:D2:00:01:85:BF`. All scripts in `scripts/` must run on a machine with
 Bluetooth hardware and the radio paired/trusted there.
 
+This MAC is hardcoded as the default in `scripts/radio_config.py`, so
+none of the scripts below require passing it on the command line. If
+you're not sure of the address (new radio, new machine), find it with
+`scripts/scan_radio.sh` (a thin wrapper around `scan_ble.py`); override
+the default per-invocation with the `UV_PRO_ADDR` environment variable
+rather than passing it as an argument everywhere.
+
 ## Protocol gotchas
 
 These are the non-obvious things that took a long debugging session to
@@ -50,6 +57,7 @@ find (most are also commented inline where relevant):
 
 ## Current capabilities
 
+- `scan_radio.sh` — BLE scan, highlights the UV-Pro if it's found
 - `connect_test.py` — device info, battery, GPS position (JSON on stdout)
 - `channel_control.py` — list/get/edit channel memories (name, freq,
   modulation, bandwidth, tone, power/scan flags), set dual-watch A/B
@@ -57,6 +65,8 @@ find (most are also commented inline where relevant):
 - `kiss_bridge.py` — bridges the radio's built-in TNC to a real KISS pty,
   so the Linux AX.25 stack (and Pat) can use the radio as a packet TNC
   over Bluetooth. See "Pat / Winlink over Bluetooth" below.
+- `start_radio.sh` / `start_pat.sh` — one-command startup for the above
+  (no `screen`, no manual multi-terminal juggling); see below.
 
 Note: the radio's actively-displayed channel is hardware-dial-controlled
 and not remotely settable in this protocol.
@@ -82,24 +92,27 @@ sudo apt install ax25-tools ax25-apps
 echo "wl2k    K0MDT-1 1200    255     2       UV-Pro Bluetooth TNC" | sudo tee -a /etc/ax25/axports
 ```
 
-(`ax25-tools`/`ax25-apps` aren't installed yet as of 2026-08-29 -- the
-`ax25` kernel module is present. Nothing above has been run; needs sudo
-and wasn't available non-interactively.)
+(Confirmed done as of 2026-08-30: `ax25-tools`/`ax25-apps` installed
+(`kissattach`, `ax25d` present in `/usr/sbin`), `axports` has the `wl2k`
+entry above.)
 
-Per session, in one terminal:
-
-```
-cd /home/mdthomas/Projects/open_ht && source .venv/bin/activate
-python scripts/kiss_bridge.py 38:D2:00:01:85:BF
-```
-
-Leave it running (prints the pty path, defaults to
-`~/.cache/uvpro-kisstnc`). In another terminal:
+Per session:
 
 ```
-sudo kissattach ~/.cache/uvpro-kisstnc wl2k
-pat connect ax25:///SOME-CALL
+scripts/start_radio.sh                # backgrounds kiss_bridge.py, then
+                                       # runs `sudo kissattach` (prompts once)
+scripts/start_pat.sh                  # runs `pat http` in the foreground
 ```
+
+`start_radio.sh` runs `kiss_bridge.py` in the background (log at
+`~/.cache/uvpro-bridge.log`, pid at `~/.cache/uvpro-bridge.pid`), waits
+for the KISS pty to appear, then runs `sudo kissattach` in the
+foreground so you can enter your password once; `kissattach` daemonizes
+on success so the script exits leaving both processes running. Stop the
+bridge later with `kill -INT $(cat ~/.cache/uvpro-bridge.pid)` (plain
+SIGINT, not `-9`). Then `scripts/start_pat.sh` starts Pat's web UI at
+`http://localhost:8080`, or connect directly with
+`pat connect ax25:///SOME-CALL`.
 
 The pty symlink deliberately defaults under `~/.cache`, not `/tmp`:
 `kissattach` runs as root via sudo, and the kernel's `fs.protected_symlinks`
@@ -110,15 +123,11 @@ permissions look fine. `~/.cache` isn't sticky/world-writable, so the
 restriction never triggers. (Hit this live on 2026-08-29 with the /tmp
 default before switching it.)
 
-`scripts/start_bridge.sh [device_uuid]` launches both the bridge and
-`kissattach` together in a detached `screen` session (`screen -r
-uvpro-tnc` to attach; `sudo` still prompts interactively in the
-`kissattach` window). Note: `kissattach` daemonizes on success and keeps
-running independently of the window/session that launched it -- a stale
-one from an earlier run holds the `wl2k` port lock and makes the next
-attach fail with "already in use". `start_bridge.sh` checks for this and
-tells you to `sudo pkill kissattach` first; do that before every fresh
-start if you skip the script.
+`start_radio.sh` also checks for a stale `kiss_bridge.py` or
+`kissattach` from an earlier session first and refuses to start over
+it -- a stale `kissattach` holds the `wl2k` port lock and makes a fresh
+attach fail with "already in use". Kill it with `sudo pkill kissattach`
+(or `sudo kill <pid>` from `pgrep -af kissattach`) before retrying.
 
 **Known failure mode, hit live on 2026-08-29: `ax0` can get permanently
 stuck at the kernel level.** After enough kill/restart/crash cycles of

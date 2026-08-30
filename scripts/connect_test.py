@@ -2,8 +2,11 @@
 position as JSON.
 
 Usage:
-    python scripts/connect_test.py XX:XX:XX:XX:XX:XX ble
-    python scripts/connect_test.py XX:XX:XX:XX:XX:XX rfcomm [channel|auto]
+    python scripts/connect_test.py [XX:XX:XX:XX:XX:XX] ble
+    python scripts/connect_test.py [XX:XX:XX:XX:XX:XX] rfcomm [channel|auto]
+
+device address defaults to radio_config.DEFAULT_DEVICE_UUID (override via
+the UV_PRO_ADDR env var) if omitted.
 
 Progress messages go to stderr, so stdout is clean JSON.
 """
@@ -14,7 +17,10 @@ import sys
 
 import patches  # noqa: F401 (applies protocol compatibility patches on import)
 from benlink.controller import RadioController
+from radio_config import DEFAULT_DEVICE_UUID
 from radio_connect import connect_rfcomm, log
+
+MODES = {"ble", "rfcomm"}
 
 
 async def report(radio: RadioController) -> None:
@@ -41,17 +47,23 @@ async def main_rfcomm(device_uuid: str, channel_arg: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        log(f"Usage: {sys.argv[0]} XX:XX:XX:XX:XX:XX ble|rfcomm [channel]")
+    if len(sys.argv) > 1 and sys.argv[1] in MODES:
+        device_uuid = DEFAULT_DEVICE_UUID
+        rest = sys.argv[1:]
+    else:
+        device_uuid = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DEVICE_UUID
+        rest = sys.argv[2:]
+
+    if not rest:
+        log(f"Usage: {sys.argv[0]} [XX:XX:XX:XX:XX:XX] ble|rfcomm [channel]")
         sys.exit(1)
 
-    device_uuid = sys.argv[1]
-    mode = sys.argv[2]
+    mode = rest[0]
 
     if mode == "ble":
         asyncio.run(main_ble(device_uuid))
     elif mode == "rfcomm":
-        channel_arg = sys.argv[3] if len(sys.argv) > 3 else "auto"
+        channel_arg = rest[1] if len(rest) > 1 else "auto"
         asyncio.run(main_rfcomm(device_uuid, channel_arg))
     else:
         log(f"Unknown mode: {mode!r} (expected 'ble' or 'rfcomm')")
