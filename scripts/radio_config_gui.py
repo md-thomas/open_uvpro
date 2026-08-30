@@ -287,14 +287,23 @@ class RadioConfigGUI(ctk.CTk):
 
     # ---------- Collapsible panes ----------
 
-    def _make_pane(self, paned: tk.PanedWindow, title: str, minsize: int, stretch: str = "never"):
+    def _make_pane(
+        self, paned: tk.PanedWindow, title: str, minsize: int,
+        stretch: str = "never", key: str | None = None,
+    ):
         """Add a pane to `paned` (one of self.outer_paned/connection_paned/
         channels_paned) with a header row (collapse toggle + bold title --
         pack more controls into the returned header with
         side="left"/"right") and a body frame for the section's actual
         content (grid or pack into the returned body). Collapsing hides
         the body and shrinks the pane to just the header row; expanding
-        restores it to `minsize`."""
+        restores it to `minsize`.
+
+        `key` is the identity used for layout persistence (_save_layout/
+        _restore_layout key collapsed-state by it) and defaults to
+        `title` -- pass an explicit, distinct `key` if two panes end up
+        with the same displayed title (e.g. across different tabs), so
+        their saved collapse states don't collide."""
         pane = ctk.CTkFrame(paned)
         paned.add(pane, minsize=minsize, stretch=stretch)
 
@@ -312,8 +321,8 @@ class RadioConfigGUI(ctk.CTk):
             command=lambda: self._toggle_pane(paned, pane, body, toggle_btn, minsize)
         )
         self._panes.append({
-            "paned": paned, "pane": pane, "body": body,
-            "toggle_btn": toggle_btn, "title": title, "minsize": minsize,
+            "paned": paned, "pane": pane, "body": body, "toggle_btn": toggle_btn,
+            "title": key or title, "minsize": minsize,
         })
         return header, body
 
@@ -515,6 +524,7 @@ class RadioConfigGUI(ctk.CTk):
         self._set_connected_ui(True)
         self.conn_status.configure(text="Connected.", text_color=GREEN)
         self._log("Connected.\n")
+        self._on_refresh_status()
 
     def _on_connect_failed(self, error):
         self.connect_button.configure(state="normal")
@@ -593,6 +603,10 @@ class RadioConfigGUI(ctk.CTk):
                     _power_of(c), "Y" if c["scan"] else "",
                 ),
             )
+        if channels:
+            max_id = max(c["channel_id"] for c in channels)
+            self.watch_a_spinbox.configure(to=max_id)
+            self.watch_b_spinbox.configure(to=max_id)
         self._log(f"Loaded {len(channels)} channels.\n")
 
     def _on_load_channels_failed(self, error):
@@ -770,9 +784,11 @@ class RadioConfigGUI(ctk.CTk):
     # ---------- Dual-watch ----------
 
     def _build_dual_watch_frame(self):
-        header, body = self._make_pane(self.connection_paned, "Dual-watch (A/B)", minsize=90)
+        header, body = self._make_pane(
+            self.connection_paned, "Channels", minsize=90, key="Dual-watch (A/B)",
+        )
 
-        ctk.CTkLabel(body, text="Active:").grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        ctk.CTkLabel(body, text="Dual Channel:").grid(row=0, column=0, sticky="w", padx=10, pady=5)
         self.dual_watch_active_var = tk.StringVar(value="OFF")
         ttk.Combobox(
             body, textvariable=self.dual_watch_active_var, values=DUAL_WATCH_CHOICES,
@@ -786,11 +802,15 @@ class RadioConfigGUI(ctk.CTk):
             body, text="(OFF disables dual-watch entirely)", text_color=GRAY,
         ).grid(row=0, column=3, columnspan=3, sticky="w", padx=(0, 10))
 
+        # Spinbox (not a plain entry) so A/B can be dialed up/down instead
+        # of typed; `to` defaults to this radio's channel count and is
+        # tightened once the real count is known (_on_channels_loaded).
         ctk.CTkLabel(body, text="Channel A ID:").grid(row=1, column=0, sticky="w", padx=10)
         self.watch_a_var = tk.StringVar()
-        ctk.CTkEntry(body, textvariable=self.watch_a_var, width=60).grid(
-            row=1, column=1, sticky="w", padx=(0, 10), pady=(5, 10)
+        self.watch_a_spinbox = tk.Spinbox(
+            body, from_=0, to=29, textvariable=self.watch_a_var, width=5,
         )
+        self.watch_a_spinbox.grid(row=1, column=1, sticky="w", padx=(0, 10), pady=(5, 10))
         self.set_watch_a_btn = ctk.CTkButton(
             body, text="Set A", width=80,
             command=lambda: self._on_set_watch_channel("A", self.watch_a_var),
@@ -799,9 +819,10 @@ class RadioConfigGUI(ctk.CTk):
 
         ctk.CTkLabel(body, text="Channel B ID:").grid(row=1, column=3, sticky="w")
         self.watch_b_var = tk.StringVar()
-        ctk.CTkEntry(body, textvariable=self.watch_b_var, width=60).grid(
-            row=1, column=4, sticky="w", padx=(0, 10), pady=(5, 10)
+        self.watch_b_spinbox = tk.Spinbox(
+            body, from_=0, to=29, textvariable=self.watch_b_var, width=5,
         )
+        self.watch_b_spinbox.grid(row=1, column=4, sticky="w", padx=(0, 10), pady=(5, 10))
         self.set_watch_b_btn = ctk.CTkButton(
             body, text="Set B", width=80,
             command=lambda: self._on_set_watch_channel("B", self.watch_b_var),
@@ -867,6 +888,15 @@ class RadioConfigGUI(ctk.CTk):
     def _on_status_done(self, data: dict):
         self.refresh_status_btn.configure(state="normal")
         self.status_label.configure(text=format_info(data), text_color=("black", "white"))
+
+        # Keep the dual-watch controls in sync with the radio's actual
+        # current settings, not just whatever was last typed/left over.
+        dw = data["dual_watch"]
+        self.dual_watch_active_var.set(dw["active_slot"])
+        if dw["channel_a"]:
+            self.watch_a_var.set(str(dw["channel_a"]["channel_id"]))
+        if dw["channel_b"]:
+            self.watch_b_var.set(str(dw["channel_b"]["channel_id"]))
 
     def _on_status_failed(self, error):
         self.refresh_status_btn.configure(state="normal")
