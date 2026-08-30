@@ -93,3 +93,7 @@ password in the GUI's password field / the `SUDO_PASS` env var each time
 instead, which still works either way.
 
 See `NOTES.md` for one-time AX.25/Pat configuration and known issues.
+
+## License
+
+Apache License 2.0 -- see `LICENSE` and `NOTICE`.
