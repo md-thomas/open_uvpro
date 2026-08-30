@@ -7,13 +7,16 @@ import asyncio
 import os
 
 import benlink  # noqa: F401 (ensures all protocol submodules are imported)
-from benlink.protocol.command.bitfield import Bitfield, BFLit
+from benlink.protocol.command.bitfield import NOT_PROVIDED, Bitfield, BFLit
 
 # This UV-Pro's firmware sets bits in fields benlink's protocol definitions
 # treat as always-zero reserved padding (e.g. DevInfo._pad, RfCh._pad, ...).
 # Relax every such literal-padding field to a plain int across all known
 # Bitfield subclasses, so decoding doesn't hard-fail on firmware benlink
-# wasn't originally tested against.
+# wasn't originally tested against. Keep the literal's default (usually 0)
+# on the unwrapped field so constructing a *new* instance without
+# explicitly passing the field still works (e.g. set_channel()'s
+# to_protocol() round-trip).
 
 
 def _all_bitfield_subclasses():
@@ -28,10 +31,16 @@ def _all_bitfield_subclasses():
     return seen
 
 
+def _with_default(field, default):
+    if hasattr(field, "default") and getattr(field, "default") is NOT_PROVIDED:
+        return field._replace(default=default)
+    return field
+
+
 for _cls in _all_bitfield_subclasses():
     for _name, _field in list(_cls._fields.items()):
         if isinstance(_field, BFLit) and _name.lower().startswith("_pad"):
-            _cls._fields[_name] = _field.inner
+            _cls._fields[_name] = _with_default(_field.inner, _field.default)
 
 
 # bleak's BlueZ backend normally requires a fresh LE advertisement scan
