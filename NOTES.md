@@ -192,11 +192,22 @@ area (ambient packet/APRS chatter), not an edge case -- expect the
 bridge to reconnect periodically during normal use, not just during our
 own connect attempts. `RECONNECT_BACKOFF_SECONDS` is 15 (not 5) to avoid
 hammering the radio's BT stack's own "won't reconnect right after a
-disconnect" quirk. Not yet fixed properly (would mean patching
-`RfcommCommandLink`'s buffer/resync logic, or benlink's `DataRxdEvent`
-length handling, to skip the bad frame in place instead of tearing down
-the whole connection) -- tracked here as the next real improvement if
-this proves too disruptive in practice.
+disconnect" quirk.
+
+**Actually fixed, 2026-08-29:** `GaiaFrame.from_bitstream_batch` already
+has a built-in resync mode (`consume_errors=True` -- drop one byte and
+keep scanning for the next valid frame instead of raising) that benlink
+just doesn't use by default. `patches.py` now replaces
+`RfcommCommandLink.connect` to pass `consume_errors=True`. Verified with
+a standalone unit test (corrupt-prefix + valid-frame bytes -> the valid
+frame still recovers) before relying on it live. This turns a bad
+message into a silent single-byte skip instead of killing the whole
+RFCOMM connection -- much cheaper than the reconnect-based mitigation,
+and (important) means a real reply arriving right when ambient traffic
+also triggers the bug no longer risks getting lost to a torn-down
+connection. The reconnect-loop mitigation (wait_for timeout, proactive
+listen-task-death detection, 15s backoff) is kept as a second line of
+defense for whatever this doesn't catch.
 
 If packet connects still stall mysteriously, check the bridge's log for
 `TX:`/`RX:` lines (confirms frames reaching the radio) and `[DEBUG]

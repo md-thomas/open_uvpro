@@ -124,3 +124,30 @@ async def _rfcomm_connect_reuse(self, callback):
 
 
 _link.RfcommClient.connect = _rfcomm_connect_reuse
+
+
+# This firmware occasionally sends a message benlink's Gaia-frame parser
+# can't handle (confirmed: real off-air packet traffic relayed as a
+# DATA_RXD notification, apparently KISS-framed inside the notification
+# payload in a way benlink's length arithmetic doesn't account for --
+# see NOTES.md). The default from_bitstream_batch(consume_errors=False)
+# lets that raise, which kills the whole read loop and connection over
+# one bad message. benlink already has a resync mode for exactly this
+# (consume_errors=True: drop one byte and keep scanning for the next
+# valid frame instead of raising) -- it's just not the default. Use it.
+import benlink.protocol as _p  # noqa: E402
+
+
+async def _resync_command_link_connect(self, callback):
+    def on_data(data: bytes):
+        self._buffer = self._buffer.extend_bytes(data)
+        gaia_frames, self._buffer = _p.GaiaFrame.from_bitstream_batch(
+            self._buffer, consume_errors=True
+        )
+        for gaia_frame in gaia_frames:
+            callback(_p.Message.from_bytes(gaia_frame.data))
+
+    await self._client.connect(on_data)
+
+
+_link.RfcommCommandLink.connect = _resync_command_link_connect
