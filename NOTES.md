@@ -59,14 +59,22 @@ find (most are also commented inline where relevant):
 
 - `scan_radio.sh` — BLE scan, highlights the UV-Pro if it's found
 - `connect_test.py` — device info, battery, GPS position (JSON on stdout)
+- `radio_info.py` — battery, signal (RSSI), the actively-displayed
+  channel/freq/power, dual-watch A/B channels, GPS (JSON on stdout)
 - `channel_control.py` — list/get/edit channel memories (name, freq,
   modulation, bandwidth, tone, power/scan flags), set dual-watch A/B
   channel pointers
 - `kiss_bridge.py` — bridges the radio's built-in TNC to a real KISS pty,
   so the Linux AX.25 stack (and Pat) can use the radio as a packet TNC
   over Bluetooth. See "Pat / Winlink over Bluetooth" below.
-- `start_radio.sh` / `start_pat.sh` — one-command startup for the above
-  (no `screen`, no manual multi-terminal juggling); see below.
+- `start_radio.sh` / `start_pat.sh` / `stop_radio.sh` / `stop_pat.sh` —
+  one-command startup/shutdown for the above (no `screen`, no manual
+  multi-terminal juggling); see below.
+- `install_sudo_rules.sh` — one-time setup for passwordless `kissattach`
+  attach/detach; see "Passwordless sudo" below.
+- `gui.py` — CustomTkinter desktop app wrapping all of the above (device
+  scan/remember/connect, bridge/Pat start-stop, live radio info); see
+  "GUI" below.
 
 Note: the radio's actively-displayed channel is hardware-dial-controlled
 and not remotely settable in this protocol.
@@ -96,21 +104,24 @@ echo "wl2k    K0MDT-1 1200    255     2       UV-Pro Bluetooth TNC" | sudo tee -
 (`kissattach`, `ax25d` present in `/usr/sbin`), `axports` has the `wl2k`
 entry above.)
 
-Per session:
+Per session (or just use `gui.py` -- see "GUI" below):
 
 ```
 scripts/start_radio.sh                # backgrounds kiss_bridge.py, then
-                                       # runs `sudo kissattach` (prompts once)
+                                       # runs `sudo kissattach` (prompts once
+                                       # unless install_sudo_rules.sh has run)
 scripts/start_pat.sh                  # runs `pat http` in the foreground
+scripts/stop_radio.sh                 # stops both kiss_bridge.py and kissattach
+scripts/stop_pat.sh
 ```
 
 `start_radio.sh` runs `kiss_bridge.py` in the background (log at
 `~/.cache/uvpro-bridge.log`, pid at `~/.cache/uvpro-bridge.pid`), waits
 for the KISS pty to appear, then runs `sudo kissattach` in the
 foreground so you can enter your password once; `kissattach` daemonizes
-on success so the script exits leaving both processes running. Stop the
-bridge later with `kill -INT $(cat ~/.cache/uvpro-bridge.pid)` (plain
-SIGINT, not `-9`). Then `scripts/start_pat.sh` starts Pat's web UI at
+on success so the script exits leaving both processes running.
+`stop_radio.sh` reverses this (SIGINT to the bridge, `sudo pkill -f
+kissattach`). Then `scripts/start_pat.sh` starts Pat's web UI at
 `http://localhost:8080`, or connect directly with
 `pat connect ax25:///SOME-CALL`.
 
@@ -241,6 +252,89 @@ PA/transmitter stabilizes, clipping the start of every packet. Not yet
 confirmed whether that gets an actual reply -- if not, next things to
 check are physical (does the radio visibly key up / TX on send?
 antenna? is N4SER-10 actually up right now?), not the bridge.
+
+## Passwordless sudo for kissattach
+
+`kissattach`/detaching it need root. `scripts/install_sudo_rules.sh`
+(run once as `sudo scripts/install_sudo_rules.sh`) sets this up so you
+stop being prompted every time.
+
+It installs a dedicated `/etc/sudoers.d/uvpro-radio` file rather than
+appending to `/etc/sudoers` directly -- **sudoers evaluates rules
+last-match-wins, regardless of specificity.** A `NOPASSWD:
+/usr/sbin/kissattach` line added by hand straight into `/etc/sudoers`
+got silently overridden by a later, more general `ALL=(ALL:ALL) ALL`
+line already in that file, so it looked "installed" (`sudo -l` listed
+it) but never actually applied (`sudo -n kissattach` still demanded a
+password). Ubuntu's default `/etc/sudoers` processes `/etc/sudoers.d/*`
+via `#includedir` *after* its own rules, so a dedicated file there is
+guaranteed to be evaluated last and win, sidestepping the ordering issue
+entirely. Confirmed live on 2026-08-30.
+
+The rule is scoped to exactly two commands -- `kissattach` and `pkill -f
+kissattach` -- not a blanket NOPASSWD or plain `kill`. Granting
+passwordless `kill` on arbitrary PIDs would let anything ask sudo to
+kill security-critical root processes without a password; `pkill -f
+kissattach` only ever matches that one process by name. `stop_radio.sh`
+uses `pkill`, not `kill <pid>`, to match.
+
+The GUI's sudo password field (and `SUDO_PASS` for the CLI scripts)
+still works regardless of whether this is installed -- it's a
+convenience, not a requirement.
+
+## GUI (gui.py)
+
+CustomTkinter desktop wrapper around the scripts above: scan for and
+remember the radio's Bluetooth device (persisted to
+`~/.cache/uvpro-gui-device.json`), connect/disconnect, start/stop the
+bridge and Pat, and view live radio info. Run with
+`.venv/bin/python scripts/gui.py` -- **not** a bare `python3`, since it
+launches other scripts (e.g. the scan) via `sys.executable`, and a
+system Python without this project's venv packages will fail those.
+
+Gotchas hit building it (2026-08-30), for if similar symptoms show up
+again:
+
+- **A `subprocess.Popen` launched from the GUI must set `stdin=
+  subprocess.DEVNULL`.** Without it, the child inherits the GUI's own
+  terminal stdin -- if a launched script's `sudo` call ever needs a
+  password (no `SUDO_PASS`, passwordless sudo not active), it silently
+  blocks waiting for input on a terminal the user isn't looking at.
+  Since button state only resets in a `finally` block after the
+  subprocess exits, this froze *every* button (including Stop) forever,
+  not just the one clicked.
+
+- **Never wait on a subprocess that's a long-running server.**
+  `start_pat.sh` execs `pat http`, which runs until killed; the action
+  handler that launches it must fire-and-forget (no `.wait()`), or the
+  "busy" flag blocking other buttons never clears. `start_radio.sh` is
+  fine to wait on since it backgrounds `kiss_bridge.py` itself and
+  returns quickly.
+
+- **A `ttk`/`CTk` widget sharing a grid column with a `CTkLabel` whose
+  text changes periodically can get unmapped/destroyed.** Each
+  `CTkLabel.configure(text=...)` triggers a canvas redraw that can very
+  slightly perturb its measured width; with `sticky="ew"` tying a
+  neighbor's rendered size to that same column (`grid_columnconfigure(...,
+  weight=1)`), this fed a slow width-oscillation feedback loop that
+  eventually broke the widget. Confirmed by binding `<Configure>`/
+  `<Unmap>`/`<Destroy>` and dumping a stack trace on each -- no
+  application code was calling `.destroy()`; it was Tk's own geometry
+  manager reacting to the churn. Fix: `sticky="w"` (fixed width, doesn't
+  stretch) on the affected widget, and skip `.configure()` entirely when
+  the target text/color hasn't actually changed (see `_set_label` in
+  `gui.py`). Also keep any variable-length text (e.g. a raw exception
+  message) short and/or `wraplength`-wrapped -- an unwrapped long line
+  forces its column far wider than the window and was a second way to
+  trigger the same underlying instability.
+
+- `bluetoothctl info <addr>` can report `Connected: yes` for a classic
+  BT link that's actually gone stale/stuck -- seen as RFCOMM channel
+  discovery failing ("No RFCOMM channel ... responded") well beyond the
+  brief post-disconnect refusal window described above. Cycling it
+  (`bluetoothctl disconnect <addr>` then `connect <addr>`) resolved it
+  immediately when this happened. Worth trying before assuming
+  something's broken in software.
 
 ## Not yet built
 

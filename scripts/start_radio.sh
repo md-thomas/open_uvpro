@@ -17,8 +17,13 @@
 # Stop the bridge later with:
 #   kill -INT "$(cat ~/.cache/uvpro-bridge.pid)"
 # (plain SIGINT, not -9 -- see NOTES.md on why an abrupt kill can leave
-# ax0 stuck at the kernel level). Stop kissattach with a plain
-# `sudo kill <pid>` (find it via `pgrep -af kissattach`).
+# ax0 stuck at the kernel level). Stop kissattach with `sudo pkill -f
+# kissattach`, or just run stop_radio.sh.
+#
+# If the SUDO_PASS env var is set, it's piped to `sudo -S` instead of
+# prompting on the terminal -- used by gui.py, which has no controlling
+# terminal to prompt on. Not persisted anywhere; leave it unset for
+# normal interactive use.
 
 set -euo pipefail
 
@@ -66,8 +71,13 @@ if [ ! -L "$PTY_PATH" ]; then
 fi
 echo "Pty ready: $PTY_PATH -> $(readlink "$PTY_PATH")"
 
-echo "Attaching AX.25 (will prompt for your sudo password)..."
-sudo kissattach "$PTY_PATH" wl2k
+if [ -n "${SUDO_PASS:-}" ]; then
+    echo "Attaching AX.25 (using provided sudo password)..."
+    printf '%s\n' "$SUDO_PASS" | sudo -S kissattach "$PTY_PATH" wl2k
+else
+    echo "Attaching AX.25 (will prompt for your sudo password)..."
+    sudo kissattach "$PTY_PATH" wl2k
+fi
 
 echo
 echo "Done. Bridge log: tail -f $LOG_PATH"
