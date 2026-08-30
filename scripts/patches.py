@@ -111,7 +111,13 @@ async def _rfcomm_connect_reuse(self, callback):
             if not data:
                 self._st = None
                 break
-            callback(data)
+            try:
+                callback(data)
+            except Exception:
+                import sys
+                print(f"[DEBUG] parse error on raw chunk: {data.hex()}",
+                      file=sys.stderr)
+                raise
 
     listen_task = loop.create_task(listen())
     self._st = _link.SocketTask(socket_handle, listen_task)
