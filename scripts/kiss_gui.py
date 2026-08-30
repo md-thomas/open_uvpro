@@ -25,7 +25,6 @@ Usage:
 
 import json
 import os
-import re
 import subprocess
 import sys
 import threading
@@ -35,94 +34,26 @@ from tkinter import ttk
 
 import customtkinter as ctk
 
+from gui_common import (
+    MAC_RE,
+    bt_connected,
+    disambiguate as _disambiguate,
+    format_info as _format_info,
+    load_remembered_device as _load_remembered_device,
+    make_textbox_readonly,
+    pgrep,
+    save_remembered_device as _save_remembered_device,
+)
 from radio_config import DEFAULT_DEVICE_UUID
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = PROJECT_DIR / "scripts"
 BRIDGE_LOG_PATH = Path.home() / ".cache" / "uvpro-bridge.log"
-DEVICE_STATE_PATH = Path.home() / ".cache" / "uvpro-gui-device.json"
 PAT_URL = "http://localhost:8080"
-
-MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})\s*(.*)$")
 
 GREEN = "#2fa84f"
 RED = "#c0392b"
 GRAY = "#888888"
-
-
-def _disambiguate(devices: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Append the address to any label (device name) shared by more than
-    one scanned device, so the combobox never shows duplicate entries."""
-    counts: dict[str, int] = {}
-    for label, _ in devices:
-        counts[label] = counts.get(label, 0) + 1
-    return [
-        (f"{label} ({addr})" if counts[label] > 1 else label, addr)
-        for label, addr in devices
-    ]
-
-
-def pgrep(pattern: str) -> list[int]:
-    try:
-        out = subprocess.run(
-            ["pgrep", "-f", pattern], capture_output=True, text=True
-        ).stdout
-        return [int(p) for p in out.split()]
-    except Exception:
-        return []
-
-
-def bt_connected(addr: str) -> bool:
-    try:
-        out = subprocess.run(
-            ["bluetoothctl", "info", addr], capture_output=True, text=True, timeout=5
-        ).stdout
-        return "Connected: yes" in out
-    except Exception:
-        return False
-
-
-def _load_remembered_device() -> tuple[str, str] | None:
-    try:
-        data = json.loads(DEVICE_STATE_PATH.read_text())
-        addr = data.get("address", "")
-        name = data.get("name") or addr
-        if MAC_RE.match(addr):
-            return name, addr
-    except Exception:
-        pass
-    return None
-
-
-def _save_remembered_device(name: str, addr: str) -> None:
-    try:
-        DEVICE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        DEVICE_STATE_PATH.write_text(json.dumps({"name": name, "address": addr}))
-    except Exception:
-        pass
-
-
-def _format_channel(ch: dict | None) -> str:
-    if not ch:
-        return "n/a"
-    return f"{ch['name']} ({ch['tx_freq']:.4f} MHz, {ch['bandwidth']}, {ch['power']} power)"
-
-
-def _format_info(data: dict) -> str:
-    gps = data.get("gps")
-    gps_line = "not locked"
-    if gps:
-        gps_line = f"{gps['latitude']:.5f}, {gps['longitude']:.5f}"
-    dw = data["dual_watch"]
-    return "\n".join([
-        f"Battery: {data['battery_percent']}%",
-        f"Signal (RSSI): {data['signal_strength_rssi']}",
-        f"Current channel: {_format_channel(data['current_channel'])}",
-        f"Dual-watch: {dw['active_slot']}",
-        f"  A: {_format_channel(dw['channel_a'])}",
-        f"  B: {_format_channel(dw['channel_b'])}",
-        f"GPS: {gps_line}",
-    ])
 
 
 class RadioGUI(ctk.CTk):
@@ -167,9 +98,8 @@ class RadioGUI(ctk.CTk):
 
         # Remembered (or default) device is kept as a fallback address for
         # actions (Connect, Start Bridge, Refresh Info) even while the
-        # combobox itself starts blank -- it's only filled in once we've
-        # actually confirmed the device is connected, so the field never
-        # shows a stale name for a device that isn't there right now.
+        # combobox shows blank -- see _maybe_show_only_device for when it
+        # does/doesn't start blank.
         remembered = _load_remembered_device() or (DEFAULT_DEVICE_UUID, DEFAULT_DEVICE_UUID)
         self._remembered = remembered
         label, addr = remembered
@@ -181,7 +111,11 @@ class RadioGUI(ctk.CTk):
         # session after unrelated widget updates elsewhere in the window.
         # ttk.Combobox is a native, mature Tk widget -- less visually
         # matched to the CTk theme, but doesn't have that failure mode.
-        self.device_var = ctk.StringVar(value="")
+        # Starts showing the remembered device directly: at this point
+        # there's only ever one candidate (no scan has run yet), so
+        # there's no ambiguity to hide by blanking it -- see
+        # _maybe_show_only_device.
+        self.device_var = ctk.StringVar(value=label)
         self.device_combo = ttk.Combobox(
             frame, textvariable=self.device_var, values=[label], width=30,
         )
@@ -283,15 +217,23 @@ class RadioGUI(ctk.CTk):
                 self._scan_map[r_label] = r_addr
                 labels.append(r_label)
         self.device_combo.configure(values=labels)
-        # Deliberately don't auto-pick or auto-remember any result here
-        # (not even a "uv-pro" name match) -- if the actual radio didn't
-        # show up (e.g. it's already connected and so isn't advertising,
-        # as happened during testing), auto-selecting would silently pick
-        # some other nearby device instead. Wait for an explicit choice.
+        # Deliberately don't auto-pick or auto-remember a result when
+        # there's more than one (not even a "uv-pro" name match) -- if
+        # the actual radio didn't show up (e.g. it's already connected
+        # and so isn't advertising, as happened during testing),
+        # auto-selecting would silently pick some other nearby device
+        # instead. Wait for an explicit choice. But if there's only one
+        # candidate at all, there's no ambiguity to wait out.
+        self._maybe_show_only_device(labels)
         self.scan_status.configure(
             text=f"Found {len(devices)} device(s) -- pick one from the list.",
             text_color=GREEN,
         )
+
+    def _maybe_show_only_device(self, labels: list[str]):
+        if len(labels) == 1 and not self.device_var.get().strip():
+            self.device_combo.set(labels[0])
+            self._on_device_selected()
 
     def _selected_address(self) -> str:
         value = self.device_var.get().strip()
@@ -502,13 +444,11 @@ class RadioGUI(ctk.CTk):
         )
         self.log_box = ctk.CTkTextbox(frame, wrap="word")
         self.log_box.pack(fill="both", expand=True, padx=10, pady=10)
-        self.log_box.configure(state="disabled")
+        make_textbox_readonly(self.log_box)
 
     def _log(self, text: str):
-        self.log_box.configure(state="normal")
         self.log_box.insert("end", text)
         self.log_box.see("end")
-        self.log_box.configure(state="disabled")
 
     # ---------- Running scripts without blocking the UI ----------
 

@@ -47,6 +47,22 @@ That script always launches through the venv rather than a bare
 using `sys.executable`, so a system Python without `bleak`/`benlink`
 installed would fail those actions.
 
+### Radio configuration GUI
+
+A second, separate CustomTkinter app for actual UV-Pro control: browse
+and edit the 30 channel memories (name, frequency, mode, bandwidth,
+tone, TX power, scan flag, ...), enable/configure dual-watch A/B, and
+view live radio status. Unlike `kiss_gui.py`, this one talks the
+radio's own command protocol directly, so it needs the radio's one
+Bluetooth connection for itself -- stop the KISS bridge first
+(`scripts/stop_radio.sh`) if it's running.
+
+```bash
+scripts/start_radio_config_gui.sh
+```
+
+Remembers its window size, panel layout, and last-used tab between runs.
+
 ### Packet radio / Winlink (Pat) over Bluetooth
 
 ```bash

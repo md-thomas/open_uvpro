@@ -76,6 +76,15 @@ find (most are also commented inline where relevant):
   app for the connection lifecycle (device scan/remember/connect,
   bridge/Pat start-stop, live radio info) -- not general UV-Pro control
   (that's `channel_control.py` above); see "GUI" below.
+- `radio_config_gui.py` (launch via `start_radio_config_gui.sh`) —
+  CustomTkinter desktop app for actual UV-Pro control: browse/edit
+  channel memories, dual-watch A/B (including enabling it, not just
+  which channels A/B point to), live status. See "Radio configuration
+  GUI" below.
+- `gui_common.py` — shared helpers for both GUIs (remembered-device and
+  window-layout persistence, BLE scan-line parsing, process/Bluetooth
+  status checks) so they don't diverge and stay in sync on the same
+  remembered device.
 
 Note: the radio's actively-displayed channel is hardware-dial-controlled
 and not remotely settable in this protocol.
@@ -337,6 +346,80 @@ again:
   (`bluetoothctl disconnect <addr>` then `connect <addr>`) resolved it
   immediately when this happened. Worth trying before assuming
   something's broken in software.
+
+Device-selection/remembered-device logic (blank-until-connected combo,
+scan/disambiguate, `_selected_address` fallback) and status-label/log
+helpers now live in `gui_common.py` and are shared with
+`radio_config_gui.py` below -- fix bugs there once, not twice.
+
+## Radio configuration GUI (radio_config_gui.py)
+
+A second, separate GUI from `kiss_gui.py`: actual UV-Pro control
+(channel list/edit, dual-watch, live status) via the radio's own
+command protocol (same as `channel_control.py`/`radio_info.py`), not
+the Linux-side bridge lifecycle. Needs the radio's one RFCOMM connection
+for itself -- refuses to connect while `kiss_bridge.py` is running.
+
+**Persistent connection, unlike the one-shot CLI scripts.** Reconnecting
+per action would be slow and risks the "won't reconnect right after a
+disconnect" quirk (see Protocol gotchas). Instead it runs a background
+`asyncio` event loop in its own thread (`AsyncLoop`), holds one
+`RadioController` connection open in `RadioSession` for as long as
+you're connected, and dispatches each action as
+`asyncio.run_coroutine_threadsafe(coro, loop)` with a done-callback that
+hops back to the Tkinter thread via `self.after(0, ...)` -- never touch
+a Tk widget from the loop thread directly. Verified live against the
+real radio (connect, list 30 channels, edit a channel field, dual-watch
+enable/disable, all cleanly reversible) before wiring up the GUI itself.
+
+`settings.double_channel` (int, not `channels.channel_a`/`channel_b`)
+is what actually turns dual-watch on/off and picks the active slot --
+0=OFF, 1=A, 2=B (`benlink.protocol.ChannelType`). `channel_a`/
+`channel_b` only pick which channel each slot points to; easy to miss
+since channel_control.py's CLI only ever exposed those two, not
+`double_channel` itself.
+
+**Layout:** a `CTkTabview` with "Connection" (device, status,
+dual-watch) and "Channels" (channel list + edit form) tabs -- too much
+content to show usefully all at once otherwise. Each tab holds its own
+inner `tk.PanedWindow` so its sections are independently resizable; Log
+sits outside the tabs in an outer `PanedWindow` (with the tabview as the
+other pane) so it stays visible regardless of which tab is active.
+Every section also has a collapse toggle (▼/▶ button in its header) that
+hides its body and shrinks the pane to just the header row via
+`paneconfigure(minsize=..., height=...)`.
+
+Window geometry, every pane's sash position, each section's
+collapsed/expanded state, and the active tab are saved to
+`~/.cache/uvpro-gui-layout.json` (via `gui_common.save_ui_state`/
+`load_ui_state`, keyed by app name so this and `kiss_gui.py` can share
+the file) on window close and restored on next launch. Restoring sash
+positions only works once the window has its real on-screen size, so
+restore order matters: apply saved geometry first, build all panes,
+apply saved collapse states (each is just a toggle call), *then*
+`update_idletasks()`, *then* `sash_place()` -- doing this in the wrong
+order silently no-ops the sash restore.
+
+Editable channel fields are laid out in a 3-column grid (not one long
+vertical list) via a small `_place_field` helper computing
+`row, col = i // 3, i % 3`. TX power is presented as one Low/Medium/High
+combobox instead of the underlying `tx_at_max_power`/`tx_at_med_power`
+booleans (only one should ever be true; a single control can't represent
+the invalid both-true state) -- handled specially in
+`_load_channel_into_form`/`_collect_changes` since it doesn't map to a
+single channel key. `tx_sub_audio`/`rx_sub_audio` (CTCSS tone) editing
+only supports a plain float-Hz-or-none value, matching
+`channel_control.py`'s own simplification; a DCS-coded tone loads as a
+disabled, read-only field rather than risking corrupting it.
+
+Log panels in both GUIs are click-and-drag selectable/Ctrl+C-copyable
+now (`gui_common.make_textbox_readonly`) -- `state="disabled"` on the
+underlying `tkinter.Text` was the tempting way to make a log read-only,
+but it inconsistently blocks mouse selection and copy too, not just
+typing (Tk-version/platform dependent). The working pattern: leave
+`state="normal"` always, and bind `<Key>` to swallow keystrokes that
+would edit content while letting Control-combos and navigation keys
+through.
 
 ## Not yet built
 
