@@ -63,6 +63,20 @@ scripts/start_radio_config_gui.sh
 
 Remembers its window size, panel layout, and last-used tab between runs.
 
+### Channel monitor GUI
+
+A third CustomTkinter app: connects directly to the radio and decodes
+incoming AX.25 traffic live (source/destination callsigns, digipeater
+path, frame type, protocol ID, payload) into a scrolling table, with a
+detail view (full header + hex/ASCII dump) for whichever frame is
+selected. Like the radio configuration GUI, it needs the radio's one
+Bluetooth connection for itself -- stop the KISS bridge first if it's
+running.
+
+```bash
+scripts/start_channel_monitor_gui.sh
+```
+
 ### Packet radio / Winlink (Pat) over Bluetooth
 
 ```bash

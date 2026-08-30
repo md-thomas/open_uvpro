@@ -81,10 +81,19 @@ find (most are also commented inline where relevant):
   channel memories, dual-watch A/B (including enabling it, not just
   which channels A/B point to), live status. See "Radio configuration
   GUI" below.
-- `gui_common.py` — shared helpers for both GUIs (remembered-device and
-  window-layout persistence, BLE scan-line parsing, process/Bluetooth
-  status checks) so they don't diverge and stay in sync on the same
-  remembered device.
+- `gui_common.py` — shared helpers for all three GUIs (remembered-device
+  and window-layout persistence, BLE scan-line parsing, process/
+  Bluetooth status checks) so they don't diverge and stay in sync on the
+  same remembered device.
+- `channel_monitor_gui.py` (launch via `start_channel_monitor_gui.sh`) —
+  CustomTkinter desktop app that connects directly to the radio and
+  decodes incoming AX.25 traffic live (source/dest callsigns, digipeater
+  path, frame type, PID, payload) into a scrolling table; see "Channel
+  monitor GUI" below.
+- `ax25.py` — minimal AX.25 v2.0/2.2 (mod-8) frame decoder used by
+  `channel_monitor_gui.py`: address fields (callsign/SSID/digipeater
+  path), I/S/U frame type, PID. Not a full stack (no state machine, no
+  mod-128 extended sequence numbers) -- decode-only, for display.
 
 Note: the radio's actively-displayed channel is hardware-dial-controlled
 and not remotely settable in this protocol.
@@ -420,6 +429,50 @@ typing (Tk-version/platform dependent). The working pattern: leave
 `state="normal"` always, and bind `<Key>` to swallow keystrokes that
 would edit content while letting Control-combos and navigation keys
 through.
+
+## Channel monitor GUI (channel_monitor_gui.py)
+
+A third GUI, for passively watching AX.25 traffic on the radio's
+currently-tuned channel: connects directly to the radio's own command
+protocol (same `RadioController`/`connect_rfcomm` as
+`radio_config_gui.py`), so it needs the radio's one RFCOMM connection
+for itself -- refuses to connect while `kiss_bridge.py` is running, same
+as `radio_config_gui.py`.
+
+**Deliberately doesn't tap `kiss_bridge.py`'s KISS pty.** A pty slave
+has no "broadcast to every reader" semantics -- if this GUI opened the
+same slave kissattach has open, the kernel would split incoming bytes
+between the two readers essentially at random, silently corrupting both
+kissattach's AX.25 stack traffic and whatever this GUI displays. A fully
+separate connection avoids that at the cost of the usual one-connection
+limit (can't monitor while the bridge/Pat are running).
+
+Reassembles the radio's fragmented `TncDataFragment` events into
+complete AX.25 frames -- identical logic to `kiss_bridge.py`'s
+reassembly, just decoded and displayed instead of KISS-encoded onto a
+pty. Also enables `kiss_en` on connect if it was off, same as
+`kiss_bridge.py`, since fragments don't arrive at all otherwise.
+
+Same silent-death risk as `kiss_bridge.py`'s background read loop (see
+Protocol gotchas) applies here too, so `MonitorSession.connect()` starts
+a watchdog task awaiting the same internal `listen_task` directly and
+reports a "Connection lost" status instead of the GUI just going quiet
+and looking like an idle channel.
+
+Decoding is `ax25.py`'s job, kept separate from the GUI: address fields
+(6 left-shifted ASCII chars + an SSID/flags byte, repeated for
+dest/source/up to 8 digipeaters until the address-extension bit is set),
+then a 1-byte control field (mod-8 only -- this radio's TNC doesn't do
+extended mod-128 sequencing) identifying I/S/U frame type, then a PID
+byte for I-frames and UI frames only. `*` after a digipeater callsign
+means its H-bit ("has been repeated") is set -- standard monitor
+convention (e.g. `axlisten`). Malformed/non-AX.25 frames (line noise,
+corruption) are still listed (undecodable, raw hex shown) rather than
+dropped, so the table reflects everything the radio actually handed up.
+
+The frame table is capped at 500 rows (oldest dropped first) so a
+busy/noisy channel can't grow memory unbounded during a long monitoring
+session.
 
 ## Not yet built
 
