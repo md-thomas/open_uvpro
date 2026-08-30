@@ -57,7 +57,7 @@ TMP_FILE="$(mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT
 
 cat > "$TMP_FILE" <<EOF
-# Managed by open_ht/scripts/install_sudo_rules.sh -- do not hand-edit,
+# Managed by open_uvpro/scripts/install_sudo_rules.sh -- do not hand-edit,
 # re-run that script instead. Lets $TARGET_USER attach/detach the UV-Pro's
 # KISS TNC without a password prompt. See that script for why this is a
 # separate sudoers.d file and why pkill (not plain kill) is used.

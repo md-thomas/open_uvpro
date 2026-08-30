@@ -1,4 +1,4 @@
-"""Shared default radio address for open_ht scripts.
+"""Shared default radio address for open_uvpro scripts.
 
 All the entry-point scripts (connect_test.py, channel_control.py,
 kiss_bridge.py, discover_channel.py, start_radio.sh) fall back to this

@@ -1,4 +1,4 @@
-"""Shared helpers for open_ht's Tkinter/CustomTkinter GUIs (kiss_gui.py,
+"""Shared helpers for open_uvpro's Tkinter/CustomTkinter GUIs (kiss_gui.py,
 radio_config_gui.py): remembered-device persistence, BLE scan-line
 parsing, and OS-level process/Bluetooth status checks.
 

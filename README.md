@@ -1,4 +1,4 @@
-# open_ht
+# open_uvpro
 
 Interface for the BTech UV-Pro handheld ham radio, supporting connections over
 Bluetooth and USB to send and receive data.
