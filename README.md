@@ -7,6 +7,12 @@ Built on [benlink](https://github.com/khusmann/benlink) for Bluetooth
 communication with Benshi-based radios (BTech UV-Pro, Vero VR-N76,
 RadioOddity GA5WB).
 
+## Testing 
+This has been tested on: 
+Ubuntu 25.10 6.17.0-41-generic
+Python 3.13.7
+BTech UV Pro FW: 0.9.2-3
+
 ## Install/Setup
 
 ```bash
