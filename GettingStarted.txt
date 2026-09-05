@@ -1,0 +1,31 @@
+# Getting Started Readme 
+
+### Connecting to Winlink 
+## start_kiss_guis.sh 
+#  ./scripts/start_kiss_gui.sh 
+This starts the user interface that lets you:
+    - scan for bluetooth devices (radio)
+    - connect to the bluetooth on the radio
+    - start the KISS Bridget between the computer and the radio
+    - start PAT 
+    - open the web browser web page 
+
+*Note: if during the setup you don't allow sudo for the KISS bridge,
+you need to enter your password in this field 
+
+
+### Channel Monitor
+## start_channel_monitor.sh 
+# ./scripts/start_channel_monitor.sh 
+This starts a user interface that lets you connect to the bluetooth on the radio
+and listens to the audio from that interface to detect and process (view) messages
+that are recevied. 
+
+
+### Radio Config
+## start_radio_config.sh 
+# ./scripts/start_radio_config.sh 
+This starts a user interface that lets you control and program the radio. 
+
+
+
