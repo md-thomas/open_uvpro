@@ -21,11 +21,54 @@ This starts a user interface that lets you connect to the bluetooth on the radio
 and listens to the audio from that interface to detect and process (view) messages
 that are recevied. 
 
+This is a basic AX.25 protocol viewer. Maybe I'll improve this at some point,
+but I just needed a basic tool to view the AX.25 Packet bursts, during development. 
+
 
 ### Radio Config
 ## start_radio_config.sh 
 # ./scripts/start_radio_config.sh 
 This starts a user interface that lets you control and program the radio. 
+
+
+### Command line tools
+## install_sudo_rules.sh
+# ./scripts/install_sudo_rules.sh [username]
+One-time setup (run with sudo) that installs a narrowly-scoped sudoers
+rule so start_radio.sh, stop_radio.sh, and kiss_gui.py can attach/detach
+the KISS TNC (kissattach) without a password prompt every time.
+
+## kiss_gui.py
+# python scripts/kiss_gui.py
+The GUI launched by start_kiss_gui.sh. Lets you scan for the radio over
+Bluetooth and start/stop the KISS bridge and Pat's Winlink web UI from
+one window, without needing multiple terminals.
+
+## scan_radio.sh
+# ./scripts/scan_radio.sh
+Scans for nearby Bluetooth devices and confirms the UV-Pro is powered on
+and in range before you start the bridge.
+
+## start_pat.sh
+# ./scripts/start_pat.sh
+Starts Pat's Winlink web UI at http://localhost:8080. Run start_radio.sh
+first so the AX.25 port it connects through exists.
+
+## start_radio.sh
+# ./scripts/start_radio.sh [device_uuid]
+Starts the Bluetooth<->KISS bridge to the radio and attaches it to the
+kernel AX.25 stack (kissattach), bringing up the ax0 interface.
+
+## stop_pat.sh
+# ./scripts/stop_pat.sh
+Stops Pat's Winlink web UI started by start_pat.sh.
+
+## stop_radio.sh
+# ./scripts/stop_radio.sh
+Stops the KISS bridge and kissattach started by start_radio.sh, cleanly
+tearing down the ax0 interface.
+
+
 
 
 
