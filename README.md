@@ -102,4 +102,4 @@ See `NOTES.md` for one-time AX.25/Pat configuration and known issues.
 
 ## License
 
-Apache License 2.0 -- see `LICENSE` and `NOTICE`.
+MIT License -- see `LICENSE`.
